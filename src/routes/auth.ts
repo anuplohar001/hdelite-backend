@@ -1,7 +1,5 @@
-
 import express, { Request, Response } from 'express';
 import User, { IUser } from '../models/user';
-import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 
 const router = express.Router();
@@ -27,7 +25,6 @@ const createTokenResponse = (user: IUser) => {
 const generateOTP = (): string => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
-
 
 
 const sendOtpEmail = async (email: string, otp: string) => {
@@ -179,46 +176,6 @@ router.post('/signin', async (req: Request, res: Response) => {
     }
 });
 
-
-
-
-router.get('/me', async (req: Request, res: Response) => {
-    try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: 'No token, authorization denied',
-            });
-        }
-
-        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-        const user = await User.findById(decoded.id);
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: 'Token is not valid',
-            });
-        }
-
-        res.json({
-            success: true,
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-            },
-        });
-    } catch (error) {
-        console.error('Auth check error:', error);
-        res.status(401).json({
-            success: false,
-            message: 'Token is not valid',
-        });
-    }
-});
 
 
 router.post("/send-otp", async (req, res) => {

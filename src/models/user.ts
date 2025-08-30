@@ -1,8 +1,10 @@
 // models/user.ts
-import mongoose, { Document, Model, Schema } from "mongoose";
+import mongoose, { Document, Model, Schema, Types } from "mongoose";
 import jwt from "jsonwebtoken";
-// Define the interface for User document
+
+
 export interface IUser extends Document {
+    _id: Types.ObjectId;   // 👈 explicitly define
     name: string;
     email: string;
     dateOfBirth: Date;
@@ -28,7 +30,6 @@ const userSchema: Schema<IUser> = new Schema(
         },
         dateOfBirth: {
             type: Date,
-            required: [true, "Date of Birth is required"],
         },
     },
     { timestamps: true }

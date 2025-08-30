@@ -1,10 +1,15 @@
 // server.ts
 import express from 'express';
-import mongoose from 'mongoose';
+import mongoose, {Types} from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
-
+import passport from "passport";
+import jwt from "jsonwebtoken";
+import session from "express-session";
+import cookieParser from "cookie-parser";
+import { Strategy as GoogleStrategy, Profile } from "passport-google-oauth20";
+import User, { IUser } from './models/user';
 // Load environment variables
 dotenv.config();
 
@@ -12,13 +17,96 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({
-    origin: 'http://localhost:5173', // Frontend URL
-    credentials: true,
-}));
-app.use(express.json());
+app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(cookieParser());
+app.use(
+    session({ secret: "secret", resave: false, saveUninitialized: false })
+);
+app.use(passport.initialize());
+app.use(passport.session());
 app.use(express.urlencoded({ extended: true }));
-  
+app.use(express.json());
+
+declare global {
+    namespace Express {
+        interface User {
+            _id: string | Types.ObjectId;
+            name: string;
+            email: string;
+        }
+    }
+}
+
+
+passport.use(
+    new GoogleStrategy(
+        {
+            clientID: process.env.GOOGLE_ID as string,
+            clientSecret: process.env.GOOGLE_SECRET as string,
+            callbackURL: "http://localhost:5000/api/auth/callback/google",
+        },
+        async (accessToken, refreshToken, profile, done) => {
+            try {
+                let user = await User.findOne({ email: profile.emails?.[0].value });
+
+                if (!user) {
+                    user = new User({
+                        name: profile.displayName,
+                        email: profile.emails?.[0].value,
+                    });
+                    await user.save();
+                }
+
+                return done(null, user.toObject());  // ✅ FIXED
+            } catch (err) {
+                return done(err as any, undefined);  // ✅ FIXED
+            }
+        }
+    )
+);
+
+
+passport.serializeUser((user, done) => {
+    done(null, user);
+});
+
+passport.deserializeUser((user: Express.User, done) => {
+    done(null, user);
+});
+
+app.get('/', (req, res) => {
+    res.send('Hello World!');
+});
+// --- Routes ---
+app.get(
+    "/api/auth/google",
+    passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" }),
+    (req, res) => {
+        console.log("Google auth initiated")
+    }
+);
+
+
+app.get(
+    "/api/auth/callback/google",
+    passport.authenticate("google", { failureRedirect: "/" }),
+    (req, res) => {
+        console.log("Google auth callback")
+        const token = jwt.sign(
+            {
+                id: req.user?._id,
+                displayName: req.user?.name,
+                email: req.user?.email,
+            },
+            process.env.JWT_SECRET as string,
+            { expiresIn: "1h" }
+        );
+
+        res.redirect(`http://localhost:5173/dashboard?token=${token}`);
+    }
+);
+
+
 // Database connection
 const connectDB = async () => {
     try {
