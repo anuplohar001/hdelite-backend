@@ -1,11 +1,13 @@
-// routes/auth.ts
+
 import express, { Request, Response } from 'express';
 import User, { IUser } from '../models/user';
 import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
 
 const router = express.Router();
+let otpStore: Record<string, string> = {};
 
-// Helper function to create response with token
+
 const createTokenResponse = (user: IUser) => {
     const token = user.generateToken();
 
@@ -21,64 +23,91 @@ const createTokenResponse = (user: IUser) => {
     };
 };
 
-// @route   POST /api/auth/signup
-// @desc    Register a new user
-// @access  Public
+
+const generateOTP = (): string => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+
+
+const sendOtpEmail = async (email: string, otp: string) => {
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    });
+
+    await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: "Your OTP Code",
+        text: `Your OTP is: ${otp}`,
+    });
+};
+
+
+
 router.post('/signup', async (req: Request, res: Response) => {
     try {
-        const { name, email, password, dateOfBirth } = req.body;
+        const { name, email, dateOfBirth, otp } = req.body;
 
-        // Validation
-        if (!name || !email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please provide name, email, and password',
+
+        if (!otp) {
+            if (!name || !email || !dateOfBirth) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Please provide name, email, and date of birth',
+                });
+            }
+
+            const existingUser = await User.findOne({ email });
+            if (existingUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'User already exists with this email',
+                });
+            }
+
+            const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            otpStore[email] = generatedOtp;
+
+            await sendOtpEmail(email, generatedOtp);
+
+            return res.status(200).json({
+                success: true,
+                message: 'OTP sent to your email',
             });
         }
 
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
+
+        if (otpStore[email] !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid or expired OTP',
+            });
+        }
+        let existingUser = await User.findOne({ email });
+
         if (existingUser) {
+
             return res.status(400).json({
                 success: false,
-                message: 'User already exists with this email',
+                message: "User already exists with this email",
             });
         }
 
-        // Create new user
-        const user = new User({
-            name,
-            email,
-            password,
-        });
-
+        const user = new User({ name, email, dateOfBirth });
         await user.save();
 
-        // Return user data with token
-        const response = createTokenResponse(user);
+        delete otpStore[email];
 
+        const response = createTokenResponse(user);
         res.status(201).json(response);
+
     } catch (error: any) {
         console.error('Signup error:', error);
-
-        // Handle validation errors
-        if (error.name === 'ValidationError') {
-            const errors = Object.values(error.errors).map((err: any) => err.message);
-            return res.status(400).json({
-                success: false,
-                message: 'Validation failed',
-                errors,
-            });
-        }
-
-        // Handle duplicate key error (email already exists)
-        if (error.code === 11000) {
-            return res.status(400).json({
-                success: false,
-                message: 'User already exists with this email',
-            });
-        }
-
         res.status(500).json({
             success: false,
             message: 'Server error during registration',
@@ -86,43 +115,61 @@ router.post('/signup', async (req: Request, res: Response) => {
     }
 });
 
-// @route   POST /api/auth/signin
-// @desc    Sign in user
-// @access  Public
+
+
 router.post('/signin', async (req: Request, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { email, otp } = req.body;
 
-        // Validation
-        if (!email || !password) {
+
+        if (!otp) {
+            if (!email) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Please provide email',
+                });
+            }
+
+            const user = await User.findOne({ email });
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found',
+                });
+            }
+
+            const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            otpStore[email] = generatedOtp;
+
+            await sendOtpEmail(email, generatedOtp);
+
+            return res.status(200).json({
+                success: true,
+                message: 'OTP sent to your email',
+            });
+        }
+
+
+        if (otpStore[email] !== otp) {
             return res.status(400).json({
                 success: false,
-                message: 'Please provide email and password',
+                message: 'Invalid or expired OTP',
             });
         }
 
-        // Find user and include password for comparison
-        const user = await User.findOne({ email }).select('+password');
+        const user = await User.findOne({ email });
         if (!user) {
-            return res.status(401).json({
+            return res.status(404).json({
                 success: false,
-                message: 'Invalid credentials',
+                message: 'User not found',
             });
         }
 
-        // Check password
-        const isMatch = await user.matchPassword(password);
-        if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials',
-            });
-        }
+        delete otpStore[email];
 
-        // Return user data with token
         const response = createTokenResponse(user);
-
         res.status(200).json(response);
+
     } catch (error: any) {
         console.error('Signin error:', error);
         res.status(500).json({
@@ -132,9 +179,9 @@ router.post('/signin', async (req: Request, res: Response) => {
     }
 });
 
-// @route   GET /api/auth/me
-// @desc    Get current user
-// @access  Private
+
+
+
 router.get('/me', async (req: Request, res: Response) => {
     try {
         const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -172,5 +219,83 @@ router.get('/me', async (req: Request, res: Response) => {
         });
     }
 });
+
+
+router.post("/send-otp", async (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    otpStore[email] = otp;
+
+
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASS }
+    });
+
+    await transporter.sendMail({
+        from: process.env.EMAIL,
+        to: email,
+        subject: "Your One Time Password for Highway Delight's Notepad Application",
+        text: `Your login OTP is: ${otp}. It will expire in 5 minutes.`,
+    });
+
+    res.json({ message: "OTP sent" });
+});
+
+
+router.post("/verify-otp", (req, res) => {
+    const { email, otp } = req.body;
+    if (otpStore[email] && otpStore[email] === otp) {
+        delete otpStore[email];
+        return res.json({ message: "OTP verified, login success", token: "JWT_TOKEN" });
+    }
+    return res.status(400).json({ message: "Invalid OTP" });
+});
+
+
+
+
+router.post("/resend-otp", async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: "Email is required",
+            });
+        }
+
+        const otp = generateOTP();
+        otpStore[email] = otp;
+
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASS }
+        });
+
+        await transporter.sendMail({
+            from: process.env.EMAIL,
+            to: email,
+            subject: "Your One Time Password for Highway Delight's Notepad Application",
+            text: `Your login OTP is: ${otp}. It will expire in 5 minutes.`,
+        });
+
+        return res.json({
+            success: true,
+            message: "New OTP sent to your email",
+        });
+    } catch (error: any) {
+        console.error("Resend OTP error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error while resending OTP",
+        });
+    }
+});
+
+
 
 export default router;
