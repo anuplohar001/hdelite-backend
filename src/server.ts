@@ -18,7 +18,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(cors({ origin: "https://hdelite-frontend.vercel.app", credentials: true }));
 app.use(cookieParser());
 app.use(
     session({ secret: "secret", resave: false, saveUninitialized: false })
@@ -75,8 +75,8 @@ passport.deserializeUser((user: Express.User, done) => {
     done(null, user);
 });
 
-app.get('/', (req, res) => {
-    res.send('Hello World!');
+app.get("/", (req, res) => {
+    res.send("Backend is running on Vercel!");
 });
 // --- Routes ---
 app.get(
@@ -104,7 +104,7 @@ app.get(
         );
 
         res.redirect(
-            `http://localhost:5173/dashboard?token=${token}&name=${req.user?.name}&email=${req.user?.email}`
+            `https://hdelite-frontend.vercel.app/dashboard?token=${token}&name=${req.user?.name}&email=${req.user?.email}`
         );
 
     }
@@ -156,11 +156,8 @@ app.use('*', (req, res) => {
 // Start server
 const startServer = async () => {
     await connectDB();
-
-    app.listen(PORT, () => {
-        console.log(`🚀 Server is running on http://localhost:${PORT}`);
-        console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-    });
 };
 
 startServer();
+
+export default app;
