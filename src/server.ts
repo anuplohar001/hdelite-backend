@@ -4,6 +4,7 @@ import mongoose, {Types} from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import notesRoutes from './routes/notesRoutes';
 import passport from "passport";
 import jwt from "jsonwebtoken";
 import session from "express-session";
@@ -91,7 +92,7 @@ app.get(
     "/api/auth/callback/google",
     passport.authenticate("google", { failureRedirect: "/" }),
     (req, res) => {
-        console.log("Google auth callback")
+        // const { name, email, dateOfBirth, otp } = req.body;
         const token = jwt.sign(
             {
                 id: req.user?._id,
@@ -102,7 +103,10 @@ app.get(
             { expiresIn: "1h" }
         );
 
-        res.redirect(`http://localhost:5173/dashboard?token=${token}`);
+        res.redirect(
+            `http://localhost:5173/dashboard?token=${token}&name=${req.user?.name}&email=${req.user?.email}`
+        );
+
     }
 );
 
@@ -110,7 +114,7 @@ app.get(
 // Database connection
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb+srv://anuplohar001:anup220803@anup-db.5z6a8tl.mongodb.net/?retryWrites=true&w=majority&appName=Anup-DB');
+        const conn = await mongoose.connect(process.env.MONGODB_URI as string);
 
         console.log(`MongoDB Connected: ${conn.connection.host}`);
     } catch (error) {
@@ -121,6 +125,7 @@ const connectDB = async () => {
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use("/api/notes", notesRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

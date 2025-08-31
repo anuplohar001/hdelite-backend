@@ -31,13 +31,13 @@ const sendOtpEmail = async (email: string, otp: string) => {
     const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: {
-            user: process.env.EMAIL_USER,
+            user: process.env.EMAIL,
             pass: process.env.EMAIL_PASS,
         },
     });
 
     await transporter.sendMail({
-        from: process.env.EMAIL_USER,
+        from: process.env.EMAIL,
         to: email,
         subject: "Your OTP Code",
         text: `Your OTP is: ${otp}`,
