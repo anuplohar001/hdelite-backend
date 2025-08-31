@@ -1,6 +1,6 @@
 // server.ts
 import express from 'express';
-import mongoose, {Types} from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
@@ -44,7 +44,7 @@ passport.use(
         {
             clientID: process.env.GOOGLE_ID as string,
             clientSecret: process.env.GOOGLE_SECRET as string,
-            callbackURL: "http://localhost:5000/api/auth/callback/google",
+            callbackURL: "https://hdelite-backend.vercel.app/api/auth/callback/google",
         },
         async (accessToken, refreshToken, profile, done) => {
             try {
